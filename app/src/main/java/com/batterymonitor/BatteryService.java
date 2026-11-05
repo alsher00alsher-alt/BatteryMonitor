@@ -46,10 +46,12 @@ public class BatteryService extends Service {
 
         int level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
         int currentUa = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
-        int voltageUv = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_VOLTAGE_NOW);
+        int voltageMv = batteryIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
 
-        // حساب الواط
-        double watts = (Math.abs((double) currentUa) * (double) voltageUv) / 1_000_000_000_000.0;
+        // حساب الواط (التيار بالملي أمبير × الفولت)
+        double currentA = Math.abs((double) currentUa) / 1_000_000.0;
+        double voltageV = (double) voltageMv / 1000.0;
+        double watts = currentA * voltageV;
         
         // حساب الوقت المتبقي (تقريبي)
         String timeLeft = "غير متاح";
