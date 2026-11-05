@@ -11,6 +11,7 @@ import android.content.IntentFilter;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.IBinder;
+
 import androidx.core.app.NotificationCompat;
 
 public class BatteryService extends Service {
@@ -22,7 +23,6 @@ public class BatteryService extends Service {
         super.onCreate();
         createNotificationChannel();
         
-        // عرض الإشعار فوراً عشان النظام ميقفلش التطبيق
         Intent batteryIntent = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
         updateNotification(batteryIntent);
 
@@ -53,33 +53,34 @@ public class BatteryService extends Service {
         BatteryManager bm = (BatteryManager) getSystemService(BATTERY_SERVICE);
         if (bm == null || batteryIntent == null) return;
 
-        int level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
+        int level = batteryIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+        int scale = batteryIntent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+        float percentage = ((float) level / (float) scale) * 100.0f;
+
         int currentUa = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
         int voltageMv = batteryIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
+        double watts = (Math.abs((double) currentUa) / 1_000_000.0) * ((double) voltageMv / 1000.0);
 
-        // حساب الواط (التيار بالملي أمبير × الفولت)
-        double currentA = Math.abs((double) currentUa) / 1_000_000.0;
-        double voltageV = (double) voltageMv / 1000.0;
-        double watts = currentA * voltageV;
-        
-        // حساب الوقت المتبقي (تقريبي)
         String timeLeft = "غير متاح";
-        if (currentUa > 0 && level < 100) {
-            // سعة البطارية الافتراضية 4000 mAh (للتقريب)
-            double remainingMah = (100 - level) * 40.0;
+        int status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+        boolean isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL;
+        
+        if (isCharging && currentUa > 0 && percentage < 100) {
+            double remainingMah = (100 - percentage) * 40.0;
             double hours = remainingMah / (currentUa / 1000.0);
             if (hours > 0 && hours < 24) {
                 int h = (int) hours;
                 int m = (int) ((hours - h) * 60);
                 timeLeft = h + " س " + m + " د";
             }
+        } else if (percentage >= 100) {
+            timeLeft = "مكتمل";
         }
 
-        // صحة البطارية
         int health = batteryIntent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1);
         String healthStr = health == BatteryManager.BATTERY_HEALTH_GOOD ? "جيدة" : "غير معروفة";
 
-        String content = String.format("⚡ %.2f W | 🔋 %d%% | ⏳ %s | ❤️ %s", watts, level, timeLeft, healthStr);
+        String content = String.format("⚡ %.2f W | 🔋 %.2f%% | ⏳ %s | ❤️ %s", watts, percentage, timeLeft, healthStr);
 
         Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("مراقب الشحن")
