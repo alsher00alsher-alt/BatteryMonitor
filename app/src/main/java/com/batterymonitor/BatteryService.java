@@ -21,14 +21,23 @@ public class BatteryService extends Service {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-        IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        
+        // عرض الإشعار فوراً عشان النظام ميقفلش التطبيق
+        Intent batteryIntent = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        updateNotification(batteryIntent);
+
         batteryReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 updateNotification(intent);
             }
         };
-        registerReceiver(batteryReceiver, filter);
+        registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+    }
+
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        return START_STICKY;
     }
 
     private void createNotificationChannel() {
@@ -79,7 +88,11 @@ public class BatteryService extends Service {
             .setOngoing(true)
             .build();
 
-        startForeground(1, notification);
+        try {
+            startForeground(1, notification);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
