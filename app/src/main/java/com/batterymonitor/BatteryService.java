@@ -14,6 +14,10 @@ import android.os.IBinder;
 
 import androidx.core.app.NotificationCompat;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+
 public class BatteryService extends Service {
     private static final String CHANNEL_ID = "battery_monitor_channel";
     private BroadcastReceiver batteryReceiver;
@@ -49,14 +53,46 @@ public class BatteryService extends Service {
         }
     }
 
+    private double getExactPercentage() {
+        try {
+            File chargeCounterFile = new File("/sys/class/power_supply/battery/charge_counter");
+            File chargeFullFile = new File("/sys/class/power_supply/battery/charge_full");
+            
+            if (!chargeFullFile.exists()) {
+                chargeFullFile = new File("/sys/class/power_supply/battery/charge_full_design");
+            }
+
+            if (chargeCounterFile.exists() && chargeFullFile.exists()) {
+                BufferedReader brCounter = new BufferedReader(new FileReader(chargeCounterFile));
+                BufferedReader brFull = new BufferedReader(new FileReader(chargeFullFile));
+                String counterStr = brCounter.readLine();
+                String fullStr = brFull.readLine();
+                brCounter.close();
+                brFull.close();
+                
+                if (counterStr != null && fullStr != null) {
+                    double counter = Double.parseDouble(counterStr.trim());
+                    double full = Double.parseDouble(fullStr.trim());
+                    if (full > 0) return (counter / full) * 100.0;
+                }
+            }
+        } catch (Exception e) {}
+        
+        Intent batteryIntent = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        if (batteryIntent != null) {
+            int level = batteryIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            int scale = batteryIntent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
+            if (level != -1 && scale != -1) return ((double) level / (double) scale) * 100.0;
+        }
+        return -1;
+    }
+
     private void updateNotification(Intent batteryIntent) {
         BatteryManager bm = (BatteryManager) getSystemService(BATTERY_SERVICE);
         if (bm == null || batteryIntent == null) return;
 
-        int level = batteryIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
-        int scale = batteryIntent.getIntExtra(BatteryManager.EXTRA_SCALE, -1);
-        float percentage = ((float) level / (float) scale) * 100.0f;
-
+        double percentage = getExactPercentage();
+        
         int currentUa = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
         int voltageMv = batteryIntent.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1);
         double watts = (Math.abs((double) currentUa) / 1_000_000.0) * ((double) voltageMv / 1000.0);
